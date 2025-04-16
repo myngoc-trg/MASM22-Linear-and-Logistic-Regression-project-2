@@ -1,0 +1,227 @@
+---
+title: "project2"
+author: "Nancy Truong"
+date: "2025-04-15"
+output: html_document
+---
+# 1. Low plasma β-carotene and vitamin use
+## (a)
+```{r}
+library(tidyverse); theme_set(theme_bw() + theme(text = element_text(size = 18)))
+getwd()  # Check current working directory
+list.files("Data")  # Check if 'carotene.xlsx' is inside the "Data" folder
+install.packages("readxl")  # Only run once if not installed
+library(readxl)
+library(dplyr)  # Load dplyr for select()
+# Lecture 3 - Elasticity - multiple linear regression
+
+library(car)
+library(rstatix)
+library(GGally)
+df <- read_excel("Data/carotene.xlsx")
+head(df)
+```
+0.42 μmol/l (micromoles per litre)
+= ? ng/ml  (nanograms per millilitre)
+
+β-carotene: C40H56
+```{r}
+plasmab_molar_mass <- 40*12.010788+56*1.0079477
+alpha <- 0.42*plasmab_molar_mass
+# 225.4882
+summary(df)
+# 3rd Qu.: 230.0  
+```
+
+## (b)
+Create a new variable, lowplasma_01, that is 1 when betaplasma < a ng/ml, and 0 otherwise.
+
+```{r}
+#?ifelse
+#plasmab$lowplasma_01 <- ifelse(plasmab$betaplasma < alpha, 1, 0)
+glimpse(df)
+
+df |> mutate(
+lowplasma_01 = as.numeric(betaplasma < alpha),
+lowplasma_hl = factor(lowplasma_01,
+levels = c(0, 1),
+labels = c("high", "low"))) -> df
+```
+You can then plot with, e.g., aes(..., y = lowplasma_01) and get 0/1 on the y-axis, while using aes(..., color = lowplasma_hl) to get separate colours for the high and
+low categories.
+```{r}
+ggplot(df, aes(age, lowplasma_01, color = lowplasma_hl)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("") +
+  ylab("Low concentration of plasma β-carotene") +
+  labs(title = "Low plasma β-carotene(=1) or Not low β-carotene (=0) vs x") 
+```
+In the report, present the number of observations that have "low" and "high" plasma β-carotene concentrations, respectively, together with the proportion with "low" concentration, as a percentage.
+```{r}
+lowplasma <- as.data.frame(
+  count(df, lowplasma_01))
+lowplasma$percentage <- round(lowplasma$n*100/sum(lowplasma$n),1)
+lowplasma
+```
+
+
+## (c)
+Start by examining the relationship between low plasma β-carotene and vitamin use by counting the number of observations for all combinations, using count, and then transform the result into a wide format with pivot_wider(), resulting in a 3 × 2-table
+```{r}
+plasma_vituse <- df |> count(vituse, lowplasma_hl) |>
+pivot_wider(id_cols = vituse,
+names_from = lowplasma_hl,
+values_from = n)
+plasma_vituse
+```
+
+
+Calculate the probabilities and the corresponding odds for having low plasma β-carotene for each of the three vitamin use categories, and add them to the table (mutate()).
+```{r}
+plasma_vituse
+# Prob. for having low plasma B
+# Correspnding odds
+# odds = Pr(success) / Pr(failure)
+plasma_vituse <- plasma_vituse |>
+  mutate(
+    prob_low = low*100/(low + high),
+    odds = prob_low / (100-prob_low)
+  )
+plasma_vituse
+```
+Also calculate the odds ratios for each of the categories, compared to a suitable reference category,
+and add them to the table, Table.1(c).
+
+```{r}
+mutate(df,
+       vituse = factor(vituse,
+                         levels = c(1, 2, 3),
+                         labels = c("often", "notoften", "no"))) -> df
+# odd ratios = OR = oddsj/ odd ref
+plasma_vituse <- plasma_vituse |>
+  mutate(
+   OR = odds / plasma_vituse$odds[1]
+  )
+plasma_vituse
+
+
+
+```
+
+## (d)
+Fit a logistic regression model, Model.1(d), for lowplasma_01 or lowplasma_hl with vituse as explanatory variable.
+
+Present the β-estimates, the e^β -estimates and their profile likelihood based 95 % confidence intervals.
+-The confint()-function calculates profile likelihood based confidence intervals for the parameters.
+```{r}
+vituse_glm <- glm(lowplasma_01 ~ vituse, family = "binomial", data = df)
+vituse_glm
+vituse_sum <- summary(vituse_glm)
+vituse_sum
+vituse_sum$coefficients
+bhat <- vituse_glm$coefficients
+ci.beta <- confint(vituse_glm)
+or = exp(bhat)
+ci.or <- exp(ci.beta)
+cbind('beta'=bhat,ci.beta, `exp(beta)` = or, ci.or) |> round(digits = 2)
+```
+Identify these estimates with the corresponding
+values in Table.1(c), and express the odds and the probabilities for each of the categories as functions of the β-parameters
+odds of often = e^(beta_0)
+odds of notoften = e^(beta_0 + beta_1)
+odds of no = e^(beta_0 + beta_2)
+
+p_i (low plasma probability) = e^x_iB / 1 + e^x_iB
+
+Use the regression model to calculate the linear predictor, the odds, and the probability of having a low plasma β-carotene concentration, together with their respective 95 % confidence intervals, for each of the three vitamin use categories. 
+Compare the result with the
+probabilities in Table.1(c)
+```{r}
+vituse_pred <- df %>%
+  select(vituse, betaplasma, lowplasma_01, lowplasma_hl)
+vituse_pred
+
+vituse_pred |> mutate(phat = predict(vituse_glm, type = "response")) -> vituse_pred
+vituse_glm$coefficients[1]
+odds_0 = exp(vituse_glm$coefficients[1])
+odds_1 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2])
+odds_2 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3])
+
+
+p_1 = exp(vituse_glm$coefficients[1]) / (1 + exp(vituse_glm$coefficients[1]))
+p_1
+
+p_2 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2]) / (1 + exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2]))
+p_2
+
+p_3 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3]) / (1 + exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3]))
+p_3
+
+
+cbind("vituse"=c(1,2,3),"odds" = c(odds_0, odds_1, odds_2), "prob_low" = c(p_1,p_2,p_3))
+
+vituse_pred <- data.frame(vituse = c("often", "notoften", "no"))
+vituse_pred
+lambda <- qnorm(1 - 0.05/2)
+vituse_pred <- cbind(vituse_pred,
+      logit = predict(vituse_glm, vituse_pred, se.fit = TRUE))
+glimpse(vituse_pred)
+
+vituse_pred |> mutate(
+  logit.lwr = logit.fit - lambda*logit.se.fit,
+  logit.upr = logit.fit + lambda*logit.se.fit) -> vituse_pred
+glimpse(vituse_pred)
+vituse_pred |> mutate(
+  "odds" = c(odds_0, odds_1, odds_2),
+  odds.lwr = exp(logit.lwr),
+  odds.upr = exp(logit.upr),
+  "prob_low" = c(p_1,p_2,p_3)) -> vituse_pred
+
+vituse_pred |> mutate(
+  p.lwr = odds.lwr/(1 + odds.lwr),
+  p.upr = odds.upr/(1 + odds.upr)) -> vituse_pred
+glimpse(vituse_pred)
+
+
+# Try more effective code
+vituse_pred <- predict(vituse_glm, vituse_pred, se.fit = TRUE)
+vituse_pred
+vituse_x0 <- data.frame(vituse = c("often", "notoften", "no"))
+
+vituse_x0 |> mutate(
+  logit = vituse_pred$fit,
+  logit.lwr = vituse_pred$fit - lambda*vituse_pred$se.fit,
+  logit.upr = vituse_pred$fit + lambda*vituse_pred$se.fit,
+  
+  "odds" = exp(vituse_pred$fit),
+  odds.lwr = exp(logit.lwr),
+  odds.upr = exp(logit.upr),
+  
+  "prob_low" = exp(vituse_pred$fit)/ (1+exp(vituse_pred$fit)),
+  p.lwr = odds.lwr/(1 + odds.lwr),
+  p.upr = odds.upr/(1 + odds.upr)) -> vituse_x0
+
+vituse_x0
+```
+
+## (e)
+For Model.1(d), use a suitable test to determine whether there are any significant differences between the vitamin use categories in the model.
+
+Report what type of test you use, the null hypothesis H0, the test statistic, the asymptotic distribution of the test statistic when H0 is true, the P-value and the conclusion.
+H_0 : B1=B2
+LR-test againsts the null model
+calculating D_0 - D and the difference in the number of parameters, i.e., the difference in the degrees of freedom. Calculate the P-value using the Chi-squared distribution
+
+```{r}
+D_diff <- vituse_sum$null.deviance - vituse_sum$deviance
+df_diff <- vituse_sum$df.null - vituse_sum$df.residual
+chi2_alpha <- qchisq(p = 1 - 0.05, df = df_diff)
+Pvalue <- pchisq(q = D_diff, df = df_diff, lower.tail = FALSE)
+
+cbind(D_diff, df_diff, chi2_alpha, Pvalue)
+```
+p-value = 1.811218e-05
+Reject H_0, all parameters seem to be significant
+
+# 2 Low plasma β-carotene and BMI

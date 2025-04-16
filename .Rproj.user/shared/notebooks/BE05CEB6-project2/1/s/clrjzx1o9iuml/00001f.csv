@@ -1,0 +1,9 @@
+"0","ggplot(df, aes(age, lowplasma_01, color = lowplasma_hl)) +"
+"0","  geom_point() +"
+"0","  geom_smooth() +"
+"0","  xlab("""") +"
+"0","  ylab(""Low concentration of plasma β-carotene"") +"
+"0","  labs(title = ""Low plasma β-carotene(=1) or Not low β-carotene (=0) vs x"") "
+"1","[38;5;232m`geom_smooth()` using method = 'loess' and formula
+= 'y ~ x'[39m
+"

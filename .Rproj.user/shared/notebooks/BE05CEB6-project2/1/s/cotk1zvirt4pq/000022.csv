@@ -1,0 +1,4 @@
+"0","lowplasma <- as.data.frame("
+"0","  count(df, lowplasma_01))"
+"0","lowplasma$percentage <- round(lowplasma$n*100/sum(lowplasma$n),1)"
+"0","lowplasma"
