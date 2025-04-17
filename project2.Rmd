@@ -18,7 +18,7 @@ library(dplyr)  # Load dplyr for select()
 library(car)
 library(rstatix)
 library(GGally)
-df <- read_excel("Data/carotene.xlsx")
+df <- read_excel("MASM22/Data/carotene.xlsx")
 head(df)
 ```
 0.42 μmol/l (micromoles per litre)
@@ -50,12 +50,14 @@ labels = c("high", "low"))) -> df
 You can then plot with, e.g., aes(..., y = lowplasma_01) and get 0/1 on the y-axis, while using aes(..., color = lowplasma_hl) to get separate colours for the high and
 low categories.
 ```{r}
+glimpse(df)
 ggplot(df, aes(age, lowplasma_01, color = lowplasma_hl)) +
   geom_point() +
   geom_smooth() +
   xlab("") +
   ylab("Low concentration of plasma β-carotene") +
-  labs(title = "Low plasma β-carotene(=1) or Not low β-carotene (=0) vs x") 
+  labs(title = "Low plasma β-carotene(=1) or Not low β-carotene (=0) vs x",
+       color = "Beta-carotene") 
 ```
 In the report, present the number of observations that have "low" and "high" plasma β-carotene concentrations, respectively, together with the proportion with "low" concentration, as a percentage.
 ```{r}
@@ -99,6 +101,8 @@ mutate(df,
                          levels = c(1, 2, 3),
                          labels = c("often", "notoften", "no"))) -> df
 # odd ratios = OR = oddsj/ odd ref
+glimpse(df)
+
 plasma_vituse <- plasma_vituse |>
   mutate(
    OR = odds / plasma_vituse$odds[1]
@@ -138,56 +142,11 @@ Use the regression model to calculate the linear predictor, the odds, and the pr
 Compare the result with the
 probabilities in Table.1(c)
 ```{r}
-vituse_pred <- df %>%
-  select(vituse, betaplasma, lowplasma_01, lowplasma_hl)
-vituse_pred
+vituse_x0 <- data.frame(vituse = c("often", "notoften", "no"))
 
-vituse_pred |> mutate(phat = predict(vituse_glm, type = "response")) -> vituse_pred
-vituse_glm$coefficients[1]
-odds_0 = exp(vituse_glm$coefficients[1])
-odds_1 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2])
-odds_2 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3])
-
-
-p_1 = exp(vituse_glm$coefficients[1]) / (1 + exp(vituse_glm$coefficients[1]))
-p_1
-
-p_2 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2]) / (1 + exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[2]))
-p_2
-
-p_3 = exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3]) / (1 + exp(vituse_glm$coefficients[1] + vituse_glm$coefficients[3]))
-p_3
-
-
-cbind("vituse"=c(1,2,3),"odds" = c(odds_0, odds_1, odds_2), "prob_low" = c(p_1,p_2,p_3))
-
-vituse_pred <- data.frame(vituse = c("often", "notoften", "no"))
+vituse_pred <- predict(vituse_glm, vituse_x0, se.fit = TRUE)
 vituse_pred
 lambda <- qnorm(1 - 0.05/2)
-vituse_pred <- cbind(vituse_pred,
-      logit = predict(vituse_glm, vituse_pred, se.fit = TRUE))
-glimpse(vituse_pred)
-
-vituse_pred |> mutate(
-  logit.lwr = logit.fit - lambda*logit.se.fit,
-  logit.upr = logit.fit + lambda*logit.se.fit) -> vituse_pred
-glimpse(vituse_pred)
-vituse_pred |> mutate(
-  "odds" = c(odds_0, odds_1, odds_2),
-  odds.lwr = exp(logit.lwr),
-  odds.upr = exp(logit.upr),
-  "prob_low" = c(p_1,p_2,p_3)) -> vituse_pred
-
-vituse_pred |> mutate(
-  p.lwr = odds.lwr/(1 + odds.lwr),
-  p.upr = odds.upr/(1 + odds.upr)) -> vituse_pred
-glimpse(vituse_pred)
-
-
-# Try more effective code
-vituse_pred <- predict(vituse_glm, vituse_pred, se.fit = TRUE)
-vituse_pred
-vituse_x0 <- data.frame(vituse = c("often", "notoften", "no"))
 
 vituse_x0 |> mutate(
   logit = vituse_pred$fit,
@@ -209,7 +168,7 @@ vituse_x0
 For Model.1(d), use a suitable test to determine whether there are any significant differences between the vitamin use categories in the model.
 
 Report what type of test you use, the null hypothesis H0, the test statistic, the asymptotic distribution of the test statistic when H0 is true, the P-value and the conclusion.
-H_0 : B1=B2
+H_0 : B1=B2=0
 LR-test againsts the null model
 calculating D_0 - D and the difference in the number of parameters, i.e., the difference in the degrees of freedom. Calculate the P-value using the Chi-squared distribution
 
@@ -225,3 +184,334 @@ p-value = 1.811218e-05
 Reject H_0, all parameters seem to be significant
 
 # 2 Low plasma β-carotene and BMI
+We will now instead examin how the probability of having a low plasma β-carotene depends on BMI using a simple logistic regression.
+## 2(a)
+Plot lowplasma_01 against bmi and add a moving average.
+```{r}
+highlightcolors <- c("|d|>2" = "red", "v > 0.045" = "pink", "Cook's D>0.1" = "purple")
+ggplot(df, aes(bmi, lowplasma_01)) +
+  geom_point() +
+  geom_smooth() +
+  xlab("BMI") +
+  ylab("Low betaplasma") +
+  labs(title = "Low betaplasma (=1) or Not low betaplasma (=0) vs BMI") 
+```
+Does the probability of having low plasma beta-carotene increase or decrease with BMI? 
+- BMI 20-35: prob of low betaplasma increases
+- BMI>35: prob slightly decreases, larger uncertainty? grey band bigger?
+
+Does this agree with what you found in Project 1?
+generally yes
+
+Fit a logistic regression for lowplasma_01 (or lowplasma_hl) as a function of BMI. This will be referred to as Model.2(a).
+
+Present the β-estimates, the e^β estimates and their profile
+likelihood based 95 % confidence intervals.
+
+```{r}
+bmi_glm <- glm(lowplasma_01 ~ bmi, family = "binomial", data = df)
+bmi_glm
+bmi_sum <- summary(bmi_glm)
+bmi_sum
+
+bmi_sum$coefficients
+bhat <- bmi_glm$coefficients
+ci.beta <- confint(bmi_glm)
+or = exp(bhat)
+ci.or <- exp(ci.beta)
+cbind('beta'=bhat,ci.beta, `exp(beta)` = or, ci.or) |> round(digits = 2)
+```
+
+Add the predicted probabilities, and a 95 % confidence interval, to the plot and comment on the result.
+
+```{r}
+head(df)
+
+df |> mutate(phat = predict(bmi_glm, type = "response")) -> bmi_pred
+bmi_pred <- cbind(
+  bmi_pred,
+  logit = predict(bmi_glm, se.fit = TRUE))
+glimpse(bmi_pred)
+bmi_pred |> mutate(logit.residual.scale = NULL) -> bmi_pred
+
+lambda <- qnorm(1 - 0.05/2)
+bmi_pred |> mutate(
+  logit.lwr = logit.fit - lambda*logit.se.fit,
+  logit.upr = logit.fit + lambda*logit.se.fit,
+  
+  odds.lwr = exp(logit.lwr),
+  odds.upr = exp(logit.upr),
+  
+  p.lwr = odds.lwr/(1 + odds.lwr),
+  p.upr = odds.upr/(1 + odds.upr)) -> bmi_pred
+glimpse(bmi_pred)
+
+ggplot(bmi_pred, aes(bmi, lowplasma_01)) +
+  geom_point() +
+  geom_smooth(se = FALSE, linetype = "dashed") +
+  geom_line(aes(y = phat), color = "red", size = 1) +
+  geom_ribbon(aes(ymin = p.lwr, ymax = p.upr), alpha = 0.2) +
+  xlab("BMI") +
+  ylab("Low betaplasma") +
+  labs(title = "Low betaplasma (=1) or Not low betaplasma (=0) vs BMI",
+       caption = "red = fitted line, with 95% confidence interval, 
+       blue dashed = moving average")
+```
+Describe how, according to the model, the odds of having low plasma β-carotene changes when BMI is
+(i) increased by 1 unit,
+(ii) decreased by 1 unit,
+(iii) decreased by 10 units
+Also calculate 95 % confidence intervals for these odds ratios.
+```{r}
+bmi_sum$coefficients[2]
+bhat <- bmi_glm$coefficients[2]
+#bhat
+ci.beta1 <- confint(bmi_glm)
+ci.beta1 <- ci.beta1[2,]
+#ci.beta1
+delta_x <- c(+1,-1,-10)
+or = exp(bhat*delta_x)
+ci.or <- exp(outer(ci.beta1, delta_x, "*"))
+
+#ci.or
+cbind('delta_x' = delta_x,'bhat'=bhat, `OR` = or, t(ci.or)) |> round(digits = 2)
+
+
+```
+
+## 2(b)
+Use both a Wald test and an LR-test to determine if the probability of having low plasma β-carotene changes with BMI in Model.2(a).
+
+Report the null hypothesis H0, the values of the respective test statistics, the asymptotic distributions of the test statistics when H0 is true, the P-values and the conclusions
+```{r}
+# Wald test
+bmi_sum$coefficients
+
+# LR-test
+D_diff <- bmi_sum$null.deviance - bmi_sum$deviance
+df_diff <- bmi_sum$df.null - bmi_sum$df.residual
+chi2_alpha <- qchisq(p = 1 - 0.05, df = df_diff)
+Pvalue <- pchisq(q = D_diff, df = df_diff, lower.tail = FALSE)
+
+cbind(D_diff, df_diff, chi2_alpha, Pvalue)
+```
+Wald test:
+p-value bmi = 0.001028734 < 0.05
+Reject H0, significant
+
+LR-test
+p-value = 0.0002806021
+
+Choose LR-test
+Warning: For small and medium size data (n < ∞) you should use a likelihood ratio test instead. n= 315
+The Wald test relies heavily on asymptotic normality
+
+
+## 2(c)
+Calculate the leverage values for Model.2(a) and plot them against BMI, adding a horizontal line at 2(p + 1)/n for visual reference.
+In the same plot, but in a different colour, add the
+leverage values from a simple linear regression with BMI as covariate. 
+```{r}
+bmi_infl <- influence(bmi_glm)
+glimpse(bmi_infl)
+bmi_lm <- lm(lowplasma_01 ~ bmi, df)
+
+bmi_pred <- cbind(bmi_pred,
+                   #xbeta = predict(bmi_glm),
+                   v_logistic = bmi_infl$hat,
+                  v_linear = hatvalues(bmi_lm))
+glimpse(bmi_pred)
+
+pplus1_bmi <- length(bmi_glm$coefficients)
+n <- nobs(bmi_glm)
+
+ggplot(bmi_pred, aes(x = bmi)) +
+  geom_point(aes(y=v_logistic, color = "logistic")) +
+  geom_point(aes(y=v_linear, color = "linear")) +
+  geom_hline(yintercept = c(2*pplus1_bmi/n)) +
+  scale_color_manual(values = c("logistic" = "red", "linear" = "blue")) +
+  labs(
+    title = "Leverage of BMI",
+    x = "BMI (kg/m²)", 
+    y = "Leverage",
+    color = "Model"
+  ) +
+  theme_minimal()
+```
+Comment on, and explain, any interesting differences in how the leverages behave, especially when BMI is large.
+Linear Model (blue dots):
+- Leverage increases sharply as BMI increases beyond ~35.
+- Leverage becomes very high for extreme BMI values (e.g., BMI > 45).
+- The leverage curve is U-shaped, with low leverage in the middle and high leverage at the extremes.
+Leverage for BMI below 38, behave the same for both models
+
+Logistic Model (red dots):
+- Leverage is more stable across the BMI range.
+- It rises slightly with BMI, but never spikes the way it does in the linear model.
+- Even at extreme BMI values, the logistic model contains the leverage more effectively.
+Leverage for logistic now depend both on X and Y and, as
+such, are no longer indicators of outliers w.r.t. X. Less sensitive to extremes of X
+
+## 2(d)
+Calculate the standardized deviance residuals for Model.2(a) and plot them against BMI, using separate colours for low and high concentrations with aes(..., color = lowplasma_hl).
+
+Add reference lines at ±3, ±2 and 0. Try to explain the systematic behaviour of the residuals.
+
+Identify the observations with residuals outside ±2 and explain why they are large. Hint:identify the observations in the plot in 2a
+```{r}
+bmi_pred |> mutate(devresid = bmi_infl$dev.res,
+                    stddevresid = devresid/sqrt(1 - v_logistic)) -> bmi_pred
+
+ggplot(bmi_pred, aes(x = bmi, 
+                      y = stddevresid, 
+                      color = as.factor(lowplasma_hl))) +
+  geom_point() +
+  geom_hline(yintercept = c(-3, -2, 0, 2, 3), 
+             linetype = c("dotted", "dashed", "solid", "dashed", "dotted"),
+             linewidth = 1) +
+  labs(title = "Standardised deviance residuals vs BMI",
+       x = "BMI", y = "devstd",
+       color = "Y")
+
+filter(bmi_pred, abs(stddevresid)>2)
+
+ggplot(bmi_pred, aes(bmi, lowplasma_01)) +
+  geom_point() +
+  geom_smooth(se = FALSE, linetype = "dashed") +
+  geom_line(aes(y = phat), color = "red", size = 1) +
+  geom_point(data = filter(bmi_pred, abs(stddevresid)>2), 
+             aes(color = "|d|>2"), size = 3) +
+  geom_ribbon(aes(ymin = p.lwr, ymax = p.upr), alpha = 0.2) +
+  xlab("BMI") +
+  ylab("Low betaplasma") +
+  labs(title = "Low betaplasma (=1) or Not low betaplasma (=0) vs BMI",
+       caption = "red = fitted line, with 95% confidence interval, 
+       blue dashed = moving average") + 
+  scale_color_manual(values = highlightcolors)+
+  theme(legend.position = "bottom")
+```
+Those outliners due to being against the trend of high BMI, low plasma
+
+## 2(e)
+Calculate Cook’s distance for Model.2(a) and plot them against BMI using separate colours for low and high concentrations. Add a suitable reference line as visual guide and highlight the observations with the large residuals from 2(d)
+```{r}
+bmi_pred <- mutate(bmi_pred, 
+                    Dcook = cooks.distance(bmi_glm))
+
+ggplot(bmi_pred, aes(x = bmi, y = Dcook)) +
+  geom_point() +
+  geom_point(data = filter(bmi_pred, v_logistic > 0.045), aes(color = "v > 0.045"),
+             size = 3) +
+  geom_point(data = filter(bmi_pred, Dcook > 0.1), aes(color = "Cook's D>0.1"),
+             size = 3) +
+  geom_point(data = filter(bmi_pred, abs(stddevresid)>2), 
+             aes(color = "|d|>2"), size = 3) +
+  geom_hline(yintercept = 4/n, linewidth = 1) +
+  labs(title = "Cook's distance vs BMI",
+       x = "BMI", 
+       color = "Highlight") +
+ scale_color_manual(values = highlightcolors)
+  theme(legend.position = "bottom")
+```
+Which observation had the largest influence? The second largest?
+```{r}
+arrange(filter(bmi_pred, abs(stddevresid)>2), Dcook)
+# largest D cook = 0.17647045, high betaplasma, bmi=45.9	
+# Second largest 0.08332085, bmi=39.5
+```
+Explain why, with some help from the plot in 2(a).
+- Limited data at high bmi
+- plot 2A, the number of people with very high BMI is likely low.
+- The model is made based on limited data, less reliable predictions and higher residuals
+
+# 3 Multiple logistic regression and model selection
+## 3(a)
+Fit a multiple logistic model using all 11 x-variables, including calories, and calculate the VIF-values. 
+
+Did the change of model from a linear regression in Projekt 1.3(c) to a logistic regression, affect the VIF? Why not? In all further analyses, exclude the variable with the
+multicollinearity issues.
+
+```{r}
+mutate(df,
+       sex = factor(sex,
+                         levels = c(1, 2),
+                         labels = c("male", "female"))) -> df
+mutate(df,
+       smokstat = factor(smokstat,
+                     levels = c(1, 2, 3),
+                     labels = c("never", "former", "current"))) -> df
+
+glimpse(df)
+all_glm <- glm(lowplasma_01 ~ bmi + age + calories + fat + cholesterol + fiber + alcohol + betadiet + smokstat + sex + vituse, data = df)
+vif(all_glm)
+```
+Lecture 4
+VIF_j = 1/(1-R^2_j)
+R_j = Corr(X.j, Xhat_j)
+The square of the correlation, 0 ≤ R2 j ≤ 1, is the amount of variability in covariate xj that can be explained by the other x-variables, see Lecture 6
+VIF does not depend on the outcome variable
+So, VIF values will be identical whether you're using: Linear regression or Logistic regression
+fat and calories will be excluded
+```{r}
+excl_glm <- glm(lowplasma_01 ~ (bmi + age + cholesterol + fiber + alcohol + betadiet + smokstat + sex + vituse)^2, data = df)
+excl_glm
+```
+Perform one Backwards elimination, starting with the full model, and one Forward selection, starting with the null model. Both versions should have the null model as lower scope and the full model as upper scope, and use BIC as selection criterion.
+```{r}
+excl_sum <- summary(excl_glm)
+#excl_sum
+step(excl_glm, k = log(nobs(excl_glm)), steps = 1)
+# AIC unless we supply k=log(n)
+null_glm <- glm(lowplasma_01 ~ 1, data = df)
+step(null_glm,
+     k = log(nobs(excl_glm)),
+     scope = list(upper = excl_glm), 
+     direction = "forward",
+     steps = 1)
+```
+Then, use each of the resulting models as starting model in a Stepwise regression, again with null and full models as scope, and BIC as criterion
+```{r}
+# BIC since we supplied k=log(n)
+model_1_glm <- glm(formula = lowplasma_01 ~ bmi + age + cholesterol + fiber + 
+    alcohol + betadiet + smokstat + sex + vituse + bmi:age + 
+    bmi:cholesterol + bmi:fiber + bmi:alcohol + bmi:betadiet + 
+    bmi:smokstat + bmi:sex + bmi:vituse + age:cholesterol + age:fiber + 
+    age:alcohol + age:betadiet + age:smokstat + age:sex + age:vituse + 
+    cholesterol:fiber + cholesterol:alcohol + cholesterol:betadiet + 
+    cholesterol:smokstat + cholesterol:sex + cholesterol:vituse + 
+    fiber:alcohol + fiber:betadiet + fiber:smokstat + fiber:sex + 
+    fiber:vituse + alcohol:betadiet + alcohol:smokstat + alcohol:sex + 
+    alcohol:vituse + betadiet:smokstat + betadiet:sex + betadiet:vituse + 
+    smokstat:sex + sex:vituse, data = df)
+
+step(model_1_glm, 
+     scope = list(lower = null_glm, upper = excl_glm),
+     direction = "both",
+     k = log(nobs(excl_lm)))
+```
+
+```{r}
+model_2_glm <- glm(formula = lowplasma_01 ~ betadiet, data = df)
+step(model_2_glm, 
+     scope = list(lower = null_glm, upper = excl_glm),
+     direction = "both",
+     k = log(nobs(excl_lm)))
+```
+Model 1: lowplasma_01 ~ bmi + age + fiber + betadiet + vituse + bmi:fiber
+    
+Model 2: lowplasma_01 ~ betadiet + vituse + bmi + age + 
+    betadiet:bmi
+    
+same
+
+
+If any of the resulting Stepwise models contain categorical variables, determine, using a suitable test, if you can reduce the number of categories from three to two in any of those variables.
+
+If so, fit the reduced model version as well and report the details of the test comparing the reduced model with two categories, with the larger model with three categories.
+Report the name of the test, the null hypothesis, the value of the test statistic, its distribution when H0 is true, the P-value and the conclusion.
+```{r}
+model_3_glm <- glm(formula = lowplasma_01 ~ betadiet + vituse + bmi + age + betadiet:bmi, data = df)
+model_3_sum <- summary(model_3_glm)
+model_3_sum
+```
+
