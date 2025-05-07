@@ -14,7 +14,8 @@ install.packages("readxl")  # Only run once if not installed
 library(readxl)
 library(dplyr)  # Load dplyr for select()
 # Lecture 3 - Elasticity - multiple linear regression
-
+library(caret)
+library(pROC)
 library(car)
 library(rstatix)
 library(GGally)
@@ -810,4 +811,129 @@ sum(abs(bestmodelaic_pred$stdpearson) > 2)
 sum(abs(bestmodelbic_pred$stdpearson) > 2)
 ```
 
-#
+# 4. Goodness-of-fit
+We will now compare the two models from 3(d), and their ability to predict whether the plasma β-carotene concentration is low or not.
+
+# 4(a)
+Start by using the cut-off value 0.5, classifying observations with ˆpi ≤ 0.5 as ”should not have low concentration”, and observations with ˆpi > 0.5 as ”should have low concentration".
+
+Present the resulting confusion matrices as well as a table, Table 4(a), collecting the Accuracy, the P-value for Acc > NIR, Cohen’s κ, the P-value for McNemar’s test, the Sensitivity and the Specificity for each of the two models.
+
+```{r}
+df |> mutate(
+  p_AIC = predict(backward_stepwise_model, type = "response"),
+  p_BIC = predict(forward_stepwise_new, type = "response")
+) -> pred_phat
+glimpse(pred_phat)
+
+pred_phat |> mutate(
+  yhat_AIC = factor(p_AIC > 0.5,
+                     levels = c(FALSE, TRUE),
+                     labels = c("high", "low"))) -> pred_phat
+
+pred_phat |> mutate(
+  yhat_BIC = factor(p_BIC > 0.5,
+                     levels = c(FALSE, TRUE),
+                     labels = c("high", "low"))) -> pred_phat
+#view(pred_phat)
+cm_AIC <- confusionMatrix(
+  data = pred_phat$yhat_AIC, 
+  reference = pred_phat$lowplasma_hl,
+  positive = "low")
+cm_AIC
+
+cm_BIC <- confusionMatrix(
+  data = pred_phat$yhat_BIC, 
+  reference = pred_phat$lowplasma_hl,
+  positive = "low")
+cm_BIC
+```
+# 4(b) Plot the ROC-curves for both models in the same plot, present a table with their AUC-values, including 95 % confidence intervals, and perform a pair-wise test comparing their
+AUC-values and discuss the result.
+
+```{r}
+roc_AIC <- roc(lowplasma_01 ~ p_AIC, data = pred_phat)
+roc_AIC
+
+coords(roc_AIC) |> head()
+
+roc_BIC <- roc(lowplasma_01 ~ p_BIC, data = pred_phat)
+roc_BIC
+
+coords(roc_BIC) |> head()
+
+ggroc(list(AIC = roc_AIC, BIC = roc_BIC)) +
+  coord_fixed() +
+  labs(title = "ROC-curves for model AIC and the BIC model") +
+  theme(
+    plot.title = element_text(size = 10),        
+    axis.title.x = element_text(size = 9),       
+    axis.title.y = element_text(size = 9),       
+    axis.text.x = element_text(size = 8),        
+    axis.text.y = element_text(size = 8),        
+    legend.text = element_text(size = 8),        # Legend label size
+    legend.title = element_text(size = 9)        # Legend title size
+  )
+```
+```{r}
+aucs <- 
+  data.frame(
+    model = c("AIC", "BIC"),
+    auc = c(auc(roc_AIC), auc(roc_BIC)),
+    lwr = c(ci(roc_AIC)[1], ci(roc_BIC)[1]),
+    upr = c(ci(auc(roc_AIC))[3], ci(auc(roc_BIC))[3]))
+aucs
+```
+```{r}
+roc.test(roc_AIC, roc_BIC)
+```
+# 4(c) 
+For each of the two models, find the optimal threshold for p, where the distance to the ideal model is minimized. Use these new thresholds to calculate new confusion matrices and a
+new version of Table.4(a), with the optimal thresholds added, Table.4(c).
+
+Comment on any interesting differences between the conclusions that can be drawn from the two 
+```{r}
+topleft_AIC <- coords(roc_AIC, "best", best.method = "closest.topleft")
+topleft_AIC
+topleft_AIC$threshold
+topleft_BIC <- coords(roc_BIC, "best", best.method = "closest.topleft")
+topleft_BIC
+
+```
+```{r}
+
+
+pred_phat |> mutate(
+  yhat_new_AIC = factor(p_AIC > topleft_AIC$threshold,
+                     levels = c(FALSE, TRUE),
+                     labels = c("high", "low"))) -> pred_phat
+
+pred_phat |> mutate(
+  yhat_new_BIC = factor(p_BIC > topleft_BIC$threshold,
+                     levels = c(FALSE, TRUE),
+                     labels = c("high", "low"))) -> pred_phat
+
+#view(pred_phat)
+cm_new_AIC <- confusionMatrix(
+  data = pred_phat$yhat_new_AIC, 
+  reference = pred_phat$lowplasma_hl,
+  positive = "low")
+cm_new_AIC
+
+cm_new_BIC <- confusionMatrix(
+  data = pred_phat$yhat_new_BIC, 
+  reference = pred_phat$lowplasma_hl,
+  positive = "low")
+cm_new_BIC
+```
+# 4(d). 
+Taking all the results into account, select the model you would prefer as the overall “best” model. Describe the reasons behind your decision
+
+Present the best model, the eβ -estimates and their corresponding 95 % confidence intervals.
+
+Comment on the variables and the possible reasons for why they would have that positive/negative effect on the probability of having a low plasma β-carotene concentration
+```{r}
+exp(best_BIC$coefficients)
+exp(confint(best_BIC))
+```
+
