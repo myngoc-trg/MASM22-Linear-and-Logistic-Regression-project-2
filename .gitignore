@@ -1,7 +1,7 @@
 .Rproj.user
 .Rhistory
-.RData
-.Ruserdata
+.Rprofile
+project2.Rproj
 
 # renv local library
 renv/library/
