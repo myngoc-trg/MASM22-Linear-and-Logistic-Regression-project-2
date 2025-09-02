@@ -941,3 +941,8 @@ exp(confint(forward_stepwise_new))
 
 ```
 
+FAIR data principles
+- Findable: Metadeta is clearly documented within the project, and dependencies are recorded in the rev.lock file. This ensures that both the data and the computational environment can be located and identified by others.
+- Accessible: Data and code are made available through standardised communication platform like GitHub, which ensures broad accessibility.
+- Interopability: The workflow relies on open and interopable formats and tools, including CSV for datasets, RMarkDown for documentation, and the R programming language for analysis. 
+- Reusable: By providing detailed documentation, pinned package versions, and R code, the workflow can be easily reused or adapted in other analytical contexts and integrated into other external workflows.
