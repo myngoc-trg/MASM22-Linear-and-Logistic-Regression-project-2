@@ -21,6 +21,7 @@ library(rstatix)
 library(GGally)
 df <- read_excel("MASM22/Data/carotene.xlsx")
 head(df)
+class(df)
 ```
 0.42 μmol/l (micromoles per litre)
 = ? ng/ml  (nanograms per millilitre)
@@ -534,6 +535,7 @@ backward_stepwise_model <- step(backward_model,
      scope = list(lower = null_glm, upper = excl_glm),
      direction = "both",
      k = log(nobs(excl_glm)))
+backward_stepwise_model
 ```
 
 ```{r include=FALSE}
@@ -541,6 +543,7 @@ forward_model <- step(null_glm,
      k = log(nobs(excl_glm)),
      scope = list(lower = null_glm, upper = excl_glm),, 
      direction = "forward")
+forward_model
 ```
 
 
@@ -933,7 +936,8 @@ Present the best model, the eβ -estimates and their corresponding 95 % confiden
 
 Comment on the variables and the possible reasons for why they would have that positive/negative effect on the probability of having a low plasma β-carotene concentration
 ```{r}
-exp(best_BIC$coefficients)
-exp(confint(best_BIC))
+exp(forward_stepwise_new$coefficients)
+exp(confint(forward_stepwise_new))
+
 ```
 
